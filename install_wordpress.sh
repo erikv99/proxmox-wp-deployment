@@ -39,6 +39,8 @@ cp -r wordpress/* .
 rm -rf wordpress latest.tar.gz
 chown -R www-data:www-data /var/www/html/
 
+apt install -y curl
+
 # Configure WordPress
 if [ -f wp-config-sample.php ]; then
   cp wp-config-sample.php wp-config.php
@@ -68,7 +70,7 @@ useradd -m -s /bin/bash training_user || true
 mkdir -p /home/training_user/.ssh
 chmod 700 /home/training_user/.ssh
 
-# Vervang dit met jouw eigen SSH public key
+# NOTE: replace with own SSD
 echo "ssh-rsa YOUR_PUBLIC_KEY" > /home/training_user/.ssh/authorized_keys
 chmod 600 /home/training_user/.ssh/authorized_keys
 chown -R training_user:training_user /home/training_user/.ssh
@@ -76,10 +78,5 @@ chown -R training_user:training_user /home/training_user/.ssh
 # Add user to sudoers
 echo "training_user ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/training_user
 chmod 440 /etc/sudoers.d/training_user
-
-# Install monitoring agent if available
-apt install -y prometheus-node-exporter || true
-systemctl enable prometheus-node-exporter || true
-systemctl start prometheus-node-exporter || true
 
 echo "WordPress installation finished!"
