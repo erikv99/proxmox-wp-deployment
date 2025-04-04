@@ -7,7 +7,7 @@ if [ -z "$1" ]; then
 fi
 
 CONTAINER_ID=$1
-CONTAINER_NUM=$(($CONTAINER_ID - 100 + 1))  # Als je startpunt 100 is
+CONTAINER_NUM=$(($CONTAINER_ID - 100 + 1))  
 SSH_USER="wpuser_${CONTAINER_NUM}"
 SSH_PASS="securePass_${CONTAINER_NUM}"  # Niet safe ofc, maar prima voor deze oplevering.
 DB_USER="wpdbuser_${CONTAINER_NUM}"
@@ -79,6 +79,8 @@ ufw default allow outgoing
 ufw allow 22/tcp  # SSH
 ufw allow 80/tcp  # HTTP
 ufw allow 443/tcp # HTTPS
+ufw allow 9100/tcp # Prometheus Node Exporter
+
 echo "y" | ufw enable
 
 # Create unique SSH user with key-based authentication
@@ -102,10 +104,21 @@ chmod 600 /root/ssh_keys/${SSH_USER}_key
 echo "$SSH_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$SSH_USER
 chmod 440 /etc/sudoers.d/$SSH_USER
 
-# Install monitoring agent (bijvoorbeeld Prometheus Node Exporter)
+# Install monitoring agent (Prometheus Node Exporter)
 apt install -y prometheus-node-exporter
+
+# Configure Node Exporter to listen on all interfaces
+cat > /etc/default/prometheus-node-exporter << 'NODEEXP'
+# Set the command-line arguments to pass to the server.
+ARGS="--web.listen-address=:9100"
+NODEEXP
+
+# Ensure Node Exporter is running
 systemctl enable prometheus-node-exporter
-systemctl start prometheus-node-exporter
+systemctl restart prometheus-node-exporter
+
+# Verify Node Exporter is running
+systemctl status prometheus-node-exporter
 
 # Configureer hostname voor monitoring identificatie
 echo "wp-server-$CONTAINER_NUM" > /etc/hostname

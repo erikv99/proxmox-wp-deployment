@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CONTAINER_COUNT = 1
+CONTAINER_COUNT=3
 
 apt install -y curl
 
@@ -21,6 +21,7 @@ for ((i=0; i<CONTAINER_COUNT; i++)); do
 done
 
 # Setup monitoring server configuration
+mkdir -p /etc/prometheus
 cat > /etc/prometheus/prometheus.yml << EOF
 global:
   scrape_interval: 15s
@@ -32,8 +33,15 @@ scrape_configs:
         - '/etc/prometheus/targets/wordpress_targets.yml'
 EOF
 
+# Check if Prometheus is installed, and if not, install it
+if ! command -v prometheus &> /dev/null; then
+  echo "Prometheus not found. Installing..."
+  apt update
+  apt install -y prometheus
+fi
+
 # Herstart monitoring service
-systemctl restart prometheus
+systemctl restart prometheus || echo "Failed to restart Prometheus. Make sure it's installed properly."
 
 echo "Setup complete for all WordPress containers"
 echo "SSH keys zijn opgeslagen in ./ssh_keys/ directory"

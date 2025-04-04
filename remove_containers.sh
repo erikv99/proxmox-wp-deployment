@@ -65,11 +65,6 @@ if [ -f "/etc/prometheus/targets/wordpress_targets.yml" ]; then
   echo "Removing monitoring configuration..."
   rm -f /etc/prometheus/targets/wordpress_targets.yml
   
-  # Restart Prometheus if it's installed
-  if systemctl status prometheus &>/dev/null; then
-    echo "Restarting Prometheus service..."
-    systemctl restart prometheus
-  fi
 fi
 
 echo "All containers have been removed and cleaned up."
