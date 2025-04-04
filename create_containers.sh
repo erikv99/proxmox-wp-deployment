@@ -3,7 +3,7 @@
 # Variabelen voor container configuratie
 BASE_IP="10.24.30" 
 START_ID=100        
-COUNT=6             
+COUNT=1             
 STORAGE="ceph-pool"
 TEMPLATE="local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
 

@@ -1,15 +1,17 @@
 #!/bin/bash
 
+CONTAINER_COUNT = 1
+
 apt install -y curl
 
 # Eerste script uitvoeren om containers te maken
 ./create_containers.sh
 
 # Wacht even tot alle containers zijn opgestart
-sleep 30
+sleep 15
 
 # Installeer WordPress op elke container
-for ((i=0; i<6; i++)); do
+for ((i=0; i<CONTAINER_COUNT; i++)); do
    ID=$((100 + i))
    echo "Installing WordPress on container $ID"
    ./install_wordpress_container.sh $ID
