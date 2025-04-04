@@ -1,5 +1,7 @@
 #!/bin/bash
 
+apt install -y curl
+
 # Eerste script uitvoeren om containers te maken
 ./create_containers.sh
 
@@ -8,12 +10,12 @@ sleep 30
 
 # Installeer WordPress op elke container
 for ((i=0; i<6; i++)); do
-  ID=$((100 + i))
-  echo "Installing WordPress on container $ID"
-  ./install_wordpress_container.sh $ID
-  
-  # Wacht tussen installaties om overbelasting te voorkomen
-  sleep 10
+   ID=$((100 + i))
+   echo "Installing WordPress on container $ID"
+   ./install_wordpress_container.sh $ID
+   
+   # Wacht tussen installaties om overbelasting te voorkomen
+   sleep 10
 done
 
 # Setup monitoring server configuration
