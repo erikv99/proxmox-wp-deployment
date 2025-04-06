@@ -2,11 +2,16 @@
 
 # Install packages and set up WordPress via SSH in manageable batches
 log "Installing packages and setting up WordPress via SSH..."
+
+# SSH session to install WordPress and dependencies
 ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -i "$SSH_KEY_DIR/${SSH_USER}_key" $SSH_USER@$VM_IP << 'ENDSSH'
 #!/bin/bash
 set -e
 
 echo "===== Starting WordPress setup ====="
+# Get the real IP address of this VM from the system
+VM_IP=$(hostname -I | awk '{print $1}')
+echo "Using VM IP: $VM_IP"
 
 # Check disk setup and ensure data disk is mounted
 echo "Ensuring data disk is mounted..."
@@ -71,6 +76,10 @@ echo "Installing MariaDB database server..."
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mariadb-server
 df -h
 
+# Check MariaDB status - removed redundant installation
+echo "Checking MariaDB status..."
+sudo systemctl status mariadb --no-pager || true
+
 echo "Final disk space after all installations:"
 df -h
 
@@ -85,9 +94,20 @@ if sudo systemctl is-active mariadb &>/dev/null || sudo systemctl is-active mysq
     sudo mysql -e "GRANT ALL PRIVILEGES ON wordpress.* TO 'wpuser'@'localhost';"
     sudo mysql -e "FLUSH PRIVILEGES;"
 else
-    echo "ERROR: Database server is not running!"
-    sudo systemctl status mariadb || true
-    sudo systemctl status mysql || true
+    echo "ERROR: Database server is not running! Attempting to start..."
+    sudo systemctl start mariadb
+    sleep 5
+    
+    if sudo systemctl is-active mariadb &>/dev/null; then
+        echo "MariaDB started successfully, creating database..."
+        sudo mysql -e "CREATE DATABASE IF NOT EXISTS wordpress;"
+        sudo mysql -e "CREATE USER IF NOT EXISTS 'wpuser'@'localhost' IDENTIFIED BY 'password123';"
+        sudo mysql -e "GRANT ALL PRIVILEGES ON wordpress.* TO 'wpuser'@'localhost';"
+        sudo mysql -e "FLUSH PRIVILEGES;"
+    else
+        echo "CRITICAL: Could not start MariaDB, installation may fail"
+        sudo systemctl status mariadb --no-pager || true
+    fi
 fi
 
 # Download and install WordPress
@@ -157,13 +177,19 @@ echo "y" | sudo ufw enable || true  # Allow this to fail if already enabled
 echo "Installing certbot for SSL..."
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-apache
 
-# Create a hostname using nip.io for the IP address
-HOST_NAME="${VM_IP//./-}.nip.io"
-echo "Configuring SSL for hostname: $HOST_NAME"
+# Testing Internet connectivity before attempting SSL
+echo "Testing Internet connectivity..."
+if ping -c 3 google.com &>/dev/null; then
+    echo "Internet connectivity confirmed, proceeding with SSL setup"
+    
+    # Create a proper domain name for the SSL certificate using nip.io
+    IP_DASH=$(echo $VM_IP | tr '.' '-')
+    HOST_NAME="${IP_DASH}.nip.io"
+    echo "Configuring SSL for hostname: $HOST_NAME"
 
-# Update Apache configuration to recognize the hostname
-echo "Updating Apache configuration..."
-sudo bash -c "cat > /etc/apache2/sites-available/wordpress-ssl.conf << EOL
+    # Update Apache configuration to recognize the hostname
+    echo "Updating Apache configuration..."
+    sudo bash -c "cat > /etc/apache2/sites-available/wordpress-ssl.conf << EOL
 <VirtualHost *:80>
     ServerName $HOST_NAME
     ServerAlias www.$HOST_NAME
@@ -180,13 +206,23 @@ sudo bash -c "cat > /etc/apache2/sites-available/wordpress-ssl.conf << EOL
 </VirtualHost>
 EOL"
 
-# Enable the site
-sudo a2ensite wordpress-ssl.conf
-sudo systemctl reload apache2
+    # Enable the site
+    sudo a2ensite wordpress-ssl.conf
+    sudo a2enmod rewrite
+    sudo systemctl reload apache2
 
-# Obtain SSL certificate
-echo "Obtaining SSL certificate..."
-sudo certbot --apache --non-interactive --agree-tos --email admin@example.com -d "$HOST_NAME"
+    # Obtain SSL certificate with error handling - use register-unsafely option
+    echo "Obtaining SSL certificate..."
+    if sudo certbot --apache --non-interactive --agree-tos --register-unsafely-without-email --preferred-challenges http -d "$HOST_NAME"; then
+        echo "SSL certificate obtained successfully"
+    else
+        echo "SSL certificate generation failed, continuing without SSL"
+        echo "Your site will still be accessible via HTTP at http://$VM_IP"
+    fi
+else
+    echo "Internet connectivity issues detected, skipping SSL setup"
+    echo "Your site will be accessible via HTTP only at http://$VM_IP"
+fi
 
 # Cleanup temporary directory
 sudo rm -rf "$TEMP_DIR"
@@ -197,10 +233,6 @@ echo "Disk usage:"
 df -h
 echo "Apache status:"
 sudo systemctl status apache2 --no-pager
-echo "Database status:"
-sudo systemctl status mariadb --no-pager || sudo systemctl status mysql --no-pager
-echo "WordPress installation directory:"
-ls -la /var/www/html/
 echo "SSL configuration:"
 sudo ls -la /etc/letsencrypt/live/ || echo "No SSL certificates found"
 ENDSSH
@@ -215,17 +247,18 @@ fi
 
 # Test if the WordPress site is accessible
 log "Testing HTTP connectivity to WordPress..."
-for i in {1..5}; do
+for i in {1..10}; do
     if curl -I --connect-timeout 5 http://$VM_IP &>/dev/null; then
         log "WordPress is now accessible via HTTP!"
         break
     fi
-    log "WordPress not yet accessible via HTTP, waiting... (attempt $i/5)"
+    log "WordPress not yet accessible via HTTP, waiting... (attempt $i/10)"
     sleep 10
 done
 
-# Create a domain name for the IP using nip.io
-DOMAIN="${VM_IP//./-}.nip.io"
+# Get VM IP and format for nip.io domain
+IP_DASH=$(echo $VM_IP | tr '.' '-')
+DOMAIN="${IP_DASH}.nip.io"
 log "WordPress is also accessible via HTTPS at https://$DOMAIN"
 
 log "WordPress installation completed"
