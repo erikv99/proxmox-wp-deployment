@@ -126,6 +126,17 @@ if [ -f wp-config-sample.php ]; then
         sudo sed -i "/put your unique phrase here/d" wp-config.php
         echo "$WP_KEYS" | sudo tee -a wp-config.php > /dev/null
     fi
+    
+    # Add WordPress security hardening
+    echo "Adding security configuration to wp-config.php..."
+    sudo bash -c "cat >> /var/www/html/wp-config.php << 'EOL'
+
+/* Security hardening */
+define('DISALLOW_FILE_EDIT', true);
+define('DISALLOW_FILE_MODS', true);
+define('FORCE_SSL_ADMIN', true);
+define('WP_AUTO_UPDATE_CORE', true);
+EOL"
 else
     echo "ERROR: WordPress files not extracted correctly"
 fi
@@ -142,6 +153,41 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 echo "y" | sudo ufw enable || true  # Allow this to fail if already enabled
 
+# Install SSL certificate using certbot
+echo "Installing certbot for SSL..."
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-apache
+
+# Create a hostname using nip.io for the IP address
+HOST_NAME="${VM_IP//./-}.nip.io"
+echo "Configuring SSL for hostname: $HOST_NAME"
+
+# Update Apache configuration to recognize the hostname
+echo "Updating Apache configuration..."
+sudo bash -c "cat > /etc/apache2/sites-available/wordpress-ssl.conf << EOL
+<VirtualHost *:80>
+    ServerName $HOST_NAME
+    ServerAlias www.$HOST_NAME
+    DocumentRoot /var/www/html
+    
+    <Directory /var/www/html>
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+    
+    ErrorLog \${APACHE_LOG_DIR}/error.log
+    CustomLog \${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+EOL"
+
+# Enable the site
+sudo a2ensite wordpress-ssl.conf
+sudo systemctl reload apache2
+
+# Obtain SSL certificate
+echo "Obtaining SSL certificate..."
+sudo certbot --apache --non-interactive --agree-tos --email admin@example.com -d "$HOST_NAME"
+
 # Cleanup temporary directory
 sudo rm -rf "$TEMP_DIR"
 
@@ -155,6 +201,8 @@ echo "Database status:"
 sudo systemctl status mariadb --no-pager || sudo systemctl status mysql --no-pager
 echo "WordPress installation directory:"
 ls -la /var/www/html/
+echo "SSL configuration:"
+sudo ls -la /etc/letsencrypt/live/ || echo "No SSL certificates found"
 ENDSSH
 
 # Check for successful installation
@@ -175,5 +223,9 @@ for i in {1..5}; do
     log "WordPress not yet accessible via HTTP, waiting... (attempt $i/5)"
     sleep 10
 done
+
+# Create a domain name for the IP using nip.io
+DOMAIN="${VM_IP//./-}.nip.io"
+log "WordPress is also accessible via HTTPS at https://$DOMAIN"
 
 log "WordPress installation completed"
