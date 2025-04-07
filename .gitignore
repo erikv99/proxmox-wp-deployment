@@ -1,2 +1,7 @@
 ssh_keys/
+**/ssh_keys/
 customer1/ansible/inventories/proxmox/group_vars/vault.yml
+**/*.retry
+ansible/*.retry
+**/__pycache__/
+*.pyc

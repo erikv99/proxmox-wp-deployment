@@ -2,7 +2,7 @@
 
 # Variables based on your original setup
 START_ID=100
-COUNT=6
+COUNT=2
 
 echo "Starting container removal process..."
 
