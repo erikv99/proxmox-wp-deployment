@@ -1,0 +1,34 @@
+---
+
+- name: Install required packages
+  apt:
+    name: 
+      - python3-pip
+      - python3-proxmoxer 
+      - python3-requests   
+    state: present
+    update_cache: yes
+
+- name: Install sshpass on control node (required for password authentication)
+  delegate_to: localhost
+  become: yes
+  apt:
+    name: sshpass
+    state: present
+    update_cache: yes
+
+- name: Include container creation tasks
+  include_tasks: create_containers.yml
+  when: action == "setup" or action == "create"
+
+- name: Include WordPress installation tasks
+  include_tasks: install_wordpress.yml
+  when: action == "setup" or action == "install"
+
+- name: Include monitoring setup tasks
+  include_tasks: setup_monitoring.yml
+  when: action == "setup" or action == "monitoring"
+
+- name: Include container uninstall tasks
+  include_tasks: uninstall_containers.yml
+  when: action == "uninstall"

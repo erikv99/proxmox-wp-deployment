@@ -1,0 +1,52 @@
+---
+- name: Set container ID
+  set_fact:
+    current_container_id: "{{ start_id + item|int }}"
+
+- name: Check if container exists
+  command: pct status {{ current_container_id }}
+  register: container_status
+  failed_when: false
+  changed_when: false
+  
+- name: Process container removal
+  when: container_status.rc == 0
+  block:
+    - name: Check if container is in HA group
+      command: ha-manager status
+      register: ha_status
+      changed_when: false
+      
+    - name: Remove container from HA if needed
+      command: ha-manager remove ct:{{ current_container_id }}
+      when: ha_status.stdout is search("ct:" + current_container_id|string)
+      failed_when: false
+      
+    - name: Stop container if running
+      command: pct stop {{ current_container_id }}
+      register: stop_result
+      failed_when: false
+      changed_when: false
+      when: "'status: running' in container_status.stdout"
+      
+    - name: Wait for container to stop (only if it was running)
+      command: pct status {{ current_container_id }}
+      register: stop_check
+      until: 
+        - stop_check is defined 
+        - not (stop_check.stdout is search("status: running"))
+      retries: 30
+      delay: 1
+      when: 
+        - stop_result is defined 
+        - stop_result is succeeded
+        - "'status: running' in container_status.stdout"
+      
+    - name: Destroy container
+      command: pct destroy {{ current_container_id }}
+      register: destroy_result
+      failed_when: false
+      
+    - name: Force destroy container if needed
+      command: pct destroy {{ current_container_id }} --force
+      when: destroy_result is failed

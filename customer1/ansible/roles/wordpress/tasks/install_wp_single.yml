@@ -1,0 +1,60 @@
+---
+- name: Set container-specific variables
+  set_fact:
+    container_id: "{{ start_id + item|int }}"
+    container_num: "{{ item|int + 1 }}"
+    ssh_user: "{{ ssh_user_prefix }}_{{ item|int + 1 }}"
+    ssh_pass: "{{ ssh_pass_prefix }}_{{ item|int + 1 }}"
+    db_user: "{{ db_user_prefix }}_{{ item|int + 1 }}"
+    db_pass: "{{ db_pass_prefix }}_{{ item|int + 1 }}"
+    root_pass: "{{ root_pass_prefix }}_{{ item|int + 1 }}"
+    container_ip: "{{ base_ip }}.{{ 60 + item|int }}"
+  
+- name: Create WordPress installation script
+  template:
+    src: wp_install.sh.j2
+    dest: "/tmp/wp_install_{{ container_id }}.sh"
+    mode: '0755'
+  
+- name: Push installation script to container
+  command: >
+    pct push {{ container_id }} /tmp/wp_install_{{ container_id }}.sh /tmp/wp_install.sh
+  
+- name: Make script executable in container
+  command: >
+    pct exec {{ container_id }} -- chmod +x /tmp/wp_install.sh
+  
+- name: Run WordPress installation script in container
+  command: >
+    pct exec {{ container_id }} -- /tmp/wp_install.sh
+  
+- name: Wait for installation to complete
+  pause:
+    seconds: 5
+  
+- name: Pull SSH key from container
+  command: >
+    pct pull {{ container_id }} /root/ssh_keys/{{ ssh_user }}_key {{ playbook_dir }}/ssh_keys/{{ ssh_user }}_key
+  
+- name: Set proper permissions on SSH key
+  file:
+    path: "{{ playbook_dir }}/ssh_keys/{{ ssh_user }}_key"
+    mode: '0600'
+  delegate_to: localhost
+  
+- name: Add container to HA
+  command: >
+    ha-manager add ct:{{ container_id }}
+  
+- name: Create monitoring directory
+  file:
+    path: "{{ prometheus_targets_dir }}"
+    state: directory
+    mode: '0755'
+  
+- name: Add container to monitoring
+  lineinfile:
+    path: "{{ prometheus_targets_dir }}/wordpress_targets.yml"
+    line: "{{ container_ip }} wp-lxc-{{ container_num }}"
+    create: yes
+    mode: '0644'

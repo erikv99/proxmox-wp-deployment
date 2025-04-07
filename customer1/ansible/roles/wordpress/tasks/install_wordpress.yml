@@ -1,0 +1,11 @@
+---
+- name: Create directory for SSH keys on Ansible controller
+  file:
+    path: "{{ playbook_dir }}/ssh_keys"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+
+- name: Install WordPress on containers (loop)
+  include_tasks: install_wp_single.yml
+  with_sequence: start=0 end="{{ container_count - 1 }}"

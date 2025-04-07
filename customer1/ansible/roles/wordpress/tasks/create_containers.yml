@@ -1,0 +1,38 @@
+---
+- name: Create LXC containers
+  proxmox:
+    api_host: "{{ inventory_hostname }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_token_id: "{{ proxmox_api_token_id | default(omit) }}"
+    api_token_secret: "{{ proxmox_api_token_secret | default(omit) }}"
+    vmid: "{{ (start_id + item|int) }}"
+    node: "{{ inventory_hostname }}"
+    hostname: "wp-lxc-{{ item|int + 1 }}"
+    ostemplate: "{{ template }}"
+    storage: "{{ storage }}"
+    memory: "{{ memory }}"
+    cores: "{{ cores }}"
+    disk: "{{ disk_size }}"
+    netif: '{"net0":"name=eth0,bridge=vmbr0,ip={{ base_ip }}.{{ 60 + item|int }}/24,gw={{ gateway }},rate={{ network_rate }}"}'
+    state: present
+  with_sequence: start=0 end="{{ container_count - 1 }}"
+  delegate_to: localhost
+  
+- name: Start containers
+  proxmox:
+    api_host: "{{ inventory_hostname }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_token_id: "{{ proxmox_api_token_id | default(omit) }}"
+    api_token_secret: "{{ proxmox_api_token_secret | default(omit) }}"
+    vmid: "{{ (start_id + item|int) }}"
+    node: "{{ inventory_hostname }}"
+    state: started
+  with_sequence: start=0 end="{{ container_count - 1 }}"
+  delegate_to: localhost
+
+- name: Wait for containers to be ready
+  pause:
+    seconds: 10
+  when: container_count > 0

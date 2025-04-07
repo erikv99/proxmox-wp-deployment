@@ -1,0 +1,9 @@
+---
+- name: Process container uninstallation
+  include_tasks: uninstall_single_container.yml
+  with_sequence: start=0 end="{{ container_count - 1 }}"
+
+- name: Remove monitoring configuration
+  file:
+    path: "{{ prometheus_targets_dir }}/wordpress_targets.yml"
+    state: absent

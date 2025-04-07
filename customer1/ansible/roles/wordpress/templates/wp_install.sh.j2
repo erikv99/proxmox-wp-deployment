@@ -1,0 +1,125 @@
+#!/bin/bash
+echo "Starting WordPress installation..."
+# Set the script to exit immediately if any command fails
+set -e
+trap 'echo "Error on line $LINENO. Execution halted."' ERR
+
+# Parameters for WordPress installation
+SSH_USER="{{ ssh_user }}"
+SSH_PASS="{{ ssh_pass }}"
+DB_USER="{{ db_user }}"
+DB_PASS="{{ db_pass }}"
+ROOT_PASS="{{ root_pass }}"
+CONTAINER_NUM="{{ container_num }}"
+
+# Update packages
+apt update && apt upgrade -y
+
+# Install LAMP stack
+apt install -y apache2 mariadb-server php libapache2-mod-php php-mysql curl
+
+# Ensure Apache is running
+systemctl start apache2
+systemctl enable apache2
+
+# Configure MariaDB
+mysqladmin -u root password "$ROOT_PASS" || true
+
+# Create database and user
+mysql -u root -p"$ROOT_PASS" <<MYSQL_SCRIPT
+CREATE DATABASE IF NOT EXISTS wordpress;
+CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';
+GRANT ALL PRIVILEGES ON wordpress.* TO '$DB_USER'@'localhost';
+FLUSH PRIVILEGES;
+MYSQL_SCRIPT
+
+# Download and install WordPress
+cd /var/www/html
+if [ -f index.html ]; then
+  rm index.html
+fi
+
+wget https://wordpress.org/latest.tar.gz
+tar -xzf latest.tar.gz
+cp -r wordpress/* .
+rm -rf wordpress latest.tar.gz
+chown -R www-data:www-data /var/www/html/
+
+# Configure WordPress
+cp wp-config-sample.php wp-config.php
+sed -i "s/database_name_here/wordpress/" wp-config.php
+sed -i "s/username_here/$DB_USER/" wp-config.php
+sed -i "s/password_here/$DB_PASS/" wp-config.php
+
+# Generate unique security keys
+if command -v curl > /dev/null; then
+  curl -s https://api.wordpress.org/secret-key/1.1/salt/ > /tmp/wp-keys
+  sed -i "/define( 'AUTH_KEY'/,/define( 'NONCE_SALT'/d" wp-config.php
+  sed -i "/put your unique phrase here/d" wp-config.php
+  
+  # More reliable way to insert the keys
+  wp_keys=$(cat /tmp/wp-keys)
+  awk -v keys="$wp_keys" '
+  /That'\''s all, stop editing/ { print keys; print; next }
+  { print }
+  ' wp-config.php > wp-config.tmp && mv wp-config.tmp wp-config.php
+  
+  rm /tmp/wp-keys
+else
+  echo "Curl not found, skipping security keys generation"
+fi
+
+# Install and configure firewall
+apt install -y ufw
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp  # SSH
+ufw allow 80/tcp  # HTTP
+ufw allow 443/tcp # HTTPS
+ufw allow 9100/tcp # Prometheus Node Exporter
+
+echo "y" | ufw enable
+
+# Create unique SSH user with key-based authentication
+useradd -m -s /bin/bash $SSH_USER
+echo "$SSH_USER:$SSH_PASS" | chpasswd
+mkdir -p /home/$SSH_USER/.ssh
+chmod 700 /home/$SSH_USER/.ssh
+
+# Generate SSH key pair for this specific user
+ssh-keygen -t rsa -b 4096 -f /home/$SSH_USER/.ssh/id_rsa -N ""
+cat /home/$SSH_USER/.ssh/id_rsa.pub > /home/$SSH_USER/.ssh/authorized_keys
+chmod 600 /home/$SSH_USER/.ssh/authorized_keys
+chown -R $SSH_USER:$SSH_USER /home/$SSH_USER/.ssh
+
+# Copy private key to accessible location for later retrieval
+mkdir -p /root/ssh_keys
+cp /home/$SSH_USER/.ssh/id_rsa /root/ssh_keys/${SSH_USER}_key
+chmod 600 /root/ssh_keys/${SSH_USER}_key
+
+# Add user to sudoers
+echo "$SSH_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$SSH_USER
+chmod 440 /etc/sudoers.d/$SSH_USER
+
+# Install monitoring agent (Prometheus Node Exporter)
+DEBIAN_FRONTEND=noninteractive 
+apt install -y prometheus-node-exporter
+
+# Configure Node Exporter to listen on all interfaces
+cat > /etc/default/prometheus-node-exporter << 'NODEEXP'
+# Set the command-line arguments to pass to the server.
+ARGS="--web.listen-address=:9100"
+NODEEXP
+
+# Ensure Node Exporter is running
+systemctl enable prometheus-node-exporter
+systemctl restart prometheus-node-exporter
+
+# Verify Node Exporter is running
+systemctl status prometheus-node-exporter
+
+# Configure hostname for monitoring identification
+echo "wp-server-$CONTAINER_NUM" > /etc/hostname
+hostname -F /etc/hostname
+
+echo "WordPress installation complete on container $CONTAINER_NUM"
