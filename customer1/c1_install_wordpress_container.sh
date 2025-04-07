@@ -105,7 +105,7 @@ echo "$SSH_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$SSH_USER
 chmod 440 /etc/sudoers.d/$SSH_USER
 
 # Install monitoring agent (Prometheus Node Exporter)
-apt install -y prometheus-node-exporter
+apt install -y -n prometheus-node-exporter
 
 # Configure Node Exporter to listen on all interfaces
 cat > /etc/default/prometheus-node-exporter << 'NODEEXP'

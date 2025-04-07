@@ -1,11 +1,11 @@
 #!/bin/bash
 
-CONTAINER_COUNT=3
+CONTAINER_COUNT=2
 
 apt install -y curl
 
 # Eerste script uitvoeren om containers te maken
-./create_containers.sh
+./customer1/c1_create_containers.sh
 
 # Wacht even tot alle containers zijn opgestart
 sleep 15
@@ -14,7 +14,7 @@ sleep 15
 for ((i=0; i<CONTAINER_COUNT; i++)); do
    ID=$((100 + i))
    echo "Installing WordPress on container $ID"
-   ./install_wordpress_container.sh $ID
+   ./customer1/c1_install_wordpress_container.sh $ID
    
    # Wacht tussen installaties om overbelasting te voorkomen
    sleep 10
