@@ -1,0 +1,70 @@
+---
+- name: Check if VM exists
+  command: qm status {{ vm_id }}
+  register: vm_status
+  failed_when: false
+  changed_when: false
+
+- name: Process VM removal
+  when: vm_status.rc == 0
+  block:
+    - name: Check if VM is in HA group
+      command: ha-manager status
+      register: ha_status
+      changed_when: false
+
+    - name: Remove VM from HA if needed
+      command: ha-manager remove vm:{{ vm_id }}
+      when: ha_status.stdout is search("vm:" + vm_id|string)
+      failed_when: false
+
+    - name: Stop VM if running
+      command: qm stop {{ vm_id }} --timeout 180
+      register: stop_result
+      failed_when: false
+      changed_when: false
+      when: "'status: running' in vm_status.stdout"
+
+    - name: Wait for VM to stop (only if it was running)
+      command: qm status {{ vm_id }}
+      register: stop_check
+      until: 
+        - stop_check is defined 
+        - not (stop_check.stdout is search("status: running"))
+      retries: 30
+      delay: 1
+      when: 
+        - stop_result is defined 
+        - stop_result is succeeded
+        - "'status: running' in vm_status.stdout"
+
+    - name: Destroy VM
+      command: qm destroy {{ vm_id }}
+      register: destroy_result
+      failed_when: false
+
+    - name: Force destroy VM if needed
+      command: qm destroy {{ vm_id }} --force
+      when: destroy_result is failed
+
+- name: Check for orphaned RBD volumes
+  command: rbd -p {{ storage }} ls
+  register: rbd_list
+  changed_when: false
+
+- name: Remove orphaned RBD volumes
+  command: rbd -p {{ storage }} rm vm-{{ vm_id }}-disk-{{ item }}
+  loop: [0, 1]
+  when: rbd_list.stdout is search("vm-" + vm_id|string + "-disk-" + item|string)
+  failed_when: false
+
+- name: Remove monitoring configuration
+  file:
+    path: "{{ prometheus_targets_dir }}/wordpress_targets.yml"
+    state: absent
+
+- name: Remove SSH host key
+  command: ssh-keygen -f "/root/.ssh/known_hosts" -R "{{ vm_ip }}"
+  delegate_to: localhost
+  failed_when: false
+  changed_when: false

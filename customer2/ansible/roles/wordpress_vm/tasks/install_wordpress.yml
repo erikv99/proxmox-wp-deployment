@@ -1,0 +1,36 @@
+---
+- name: Upload WordPress installation script
+  template:
+    src: wp_install.sh.j2
+    dest: "/tmp/wp_install.sh"
+    mode: '0755'
+  vars:
+    ansible_host: "{{ vm_ip }}"
+    ansible_user: "{{ ssh_user }}"
+    ansible_ssh_private_key_file: "{{ playbook_dir }}/ssh_keys/{{ ssh_user }}_key"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+
+- name: Execute WordPress installation script
+  command: "/tmp/wp_install.sh"
+  args:
+    chdir: "/tmp"
+  vars:
+    ansible_host: "{{ vm_ip }}"
+    ansible_user: "{{ ssh_user }}"
+    ansible_ssh_private_key_file: "{{ playbook_dir }}/ssh_keys/{{ ssh_user }}_key"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+
+- name: Wait for Apache to be installed and configured
+  wait_for:
+    host: "{{ vm_ip }}"
+    port: 80
+    delay: 5
+    timeout: 300
+  delegate_to: localhost
+
+- name: Add VM to monitoring
+  lineinfile:
+    path: "{{ prometheus_targets_dir }}/wordpress_targets.yml"
+    line: "{{ vm_ip }} {{ vm_name }}"
+    create: yes
+    mode: '0644'

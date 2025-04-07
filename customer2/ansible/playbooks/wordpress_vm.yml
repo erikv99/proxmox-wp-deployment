@@ -1,0 +1,11 @@
+---
+- name: Setup WordPress VM on Proxmox
+  hosts: pv1
+  gather_facts: yes
+  vars:
+    action: "{{ ansible_action | default('setup') }}"
+    proxmox_api_user: "root@pam"
+    proxmox_api_password: "password"
+  
+  roles:
+    - wordpress_vm

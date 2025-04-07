@@ -1,0 +1,50 @@
+---
+- name: Install required packages
+  apt:
+    name: 
+      - python3-pip
+      - python3-proxmoxer 
+      - python3-requests
+      - sshpass
+      - rbd-nbd
+    state: present
+    update_cache: yes
+
+- name: Install sshpass on control node (required for password authentication)
+  delegate_to: localhost
+  become: yes
+  apt:
+    name: sshpass
+    state: present
+    update_cache: yes
+
+- name: Create directory for SSH keys on Ansible controller
+  file:
+    path: "{{ playbook_dir }}/ssh_keys"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+
+- name: Generate SSH key for remote access
+  openssh_keypair:
+    path: "{{ playbook_dir }}/ssh_keys/{{ ssh_user }}_key"
+    size: 4096
+    type: rsa
+    mode: '0600'
+  delegate_to: localhost
+
+- name: Include VM creation tasks
+  include_tasks: create_vm.yml
+  when: action == "setup" or action == "create"
+
+- name: Include WordPress installation tasks
+  include_tasks: install_wordpress.yml
+  when: action == "setup" or action == "install"
+
+- name: Include monitoring setup tasks
+  include_tasks: setup_monitoring.yml
+  when: action == "setup" or action == "monitoring"
+
+- name: Include VM uninstall tasks
+  include_tasks: uninstall_vm.yml
+  when: action == "uninstall"

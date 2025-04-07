@@ -1,0 +1,115 @@
+---
+- name: Check for existing VM
+  command: qm status {{ vm_id }}
+  register: vm_status
+  failed_when: false
+  changed_when: false
+
+- name: Remove existing VM if it exists
+  when: vm_status.rc == 0
+  block:
+    - name: Stop VM if running
+      command: qm stop {{ vm_id }} --timeout 120
+      failed_when: false
+      when: "'running' in vm_status.stdout"
+    
+    - name: Wait for VM to stop
+      pause:
+        seconds: 10
+      when: "'running' in vm_status.stdout"
+    
+    - name: Destroy VM
+      command: qm destroy {{ vm_id }}
+      failed_when: false
+
+- name: Get Ubuntu cloud image if it doesn't exist
+  get_url:
+    url: "{{ ubuntu_image_url }}"
+    dest: "/var/lib/vz/template/iso/{{ ubuntu_image }}"
+    mode: '0644'
+    force: no
+
+- name: Create SSH public key variable
+  set_fact:
+    ssh_public_key: "{{ lookup('file', playbook_dir + '/ssh_keys/' + ssh_user + '_key.pub') }}"
+
+- name: Create cloud-init configuration file
+  template:
+    src: cloud_init.yml.j2
+    dest: "/var/lib/vz/snippets/cloud-init-config.yml"
+    mode: '0644'
+
+- name: Create VM
+  command: >
+    qm create {{ vm_id }} --name {{ vm_name }} --memory {{ memory }} --cores {{ cores }} --net0 virtio,bridge=vmbr0
+  failed_when: false
+
+- name: Import boot disk
+  command: >
+    qm importdisk {{ vm_id }} /var/lib/vz/template/iso/{{ ubuntu_image }} {{ storage }}
+
+- name: Configure boot disk
+  command: >
+    qm set {{ vm_id }} --scsihw virtio-scsi-pci --scsi0 {{ storage }}:vm-{{ vm_id }}-disk-0
+
+- name: Resize boot disk
+  command: >
+    qm resize {{ vm_id }} scsi0 {{ boot_disk_size }}
+
+- name: Check for existing data disk RBD volume
+  command: >
+    rbd ls --pool {{ storage }} | grep vm-{{ vm_id }}-disk-1
+  register: rbd_check
+  failed_when: false
+  changed_when: false
+
+- name: Remove existing data disk if it exists
+  command: >
+    rbd rm --no-progress {{ storage }}/vm-{{ vm_id }}-disk-1
+  when: rbd_check.rc == 0
+  failed_when: false
+
+- name: Create data disk RBD volume
+  command: >
+    rbd create --pool {{ storage }} --size {{ data_disk_size | regex_replace('G$', '') }} vm-{{ vm_id }}-disk-1
+
+- name: Attach data disk to VM
+  command: >
+    qm set {{ vm_id }} --scsi1 {{ storage }}:vm-{{ vm_id }}-disk-1
+
+- name: Configure VM properties
+  command: >
+    qm set {{ vm_id }} --ide2 {{ storage }}:cloudinit --boot c --bootdisk scsi0 --serial0 socket --vga serial0 --ipconfig0 ip={{ vm_ip }}/24,gw={{ gateway }} --agent enabled=1
+
+- name: Apply cloud-init configuration
+  command: >
+    qm set {{ vm_id }} --cicustom "user=local:snippets/cloud-init-config.yml"
+
+- name: Start VM
+  command: >
+    qm start {{ vm_id }}
+
+- name: Add VM to HA configuration
+  command: >
+    ha-manager add vm:{{ vm_id }}
+  failed_when: false
+
+- name: Wait for VM to boot and become reachable
+  wait_for:
+    host: "{{ vm_ip }}"
+    port: 22
+    delay: 10
+    timeout: 300
+  delegate_to: localhost
+
+- name: Wait for SSH connection to be established
+  wait_for_connection:
+    delay: 10
+    timeout: 300
+    connect_timeout: 5
+    sleep: 5
+  vars:
+    ansible_host: "{{ vm_ip }}"
+    ansible_user: "{{ ssh_user }}"
+    ansible_ssh_private_key_file: "{{ playbook_dir }}/ssh_keys/{{ ssh_user }}_key"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
