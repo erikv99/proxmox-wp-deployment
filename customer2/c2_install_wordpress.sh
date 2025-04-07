@@ -173,27 +173,41 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 echo "y" | sudo ufw enable || true  # Allow this to fail if already enabled
 
-# Install SSL certificate using certbot
-echo "Installing certbot for SSL..."
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-apache
+# Install SSL using self-signed certificate
+echo "Setting up HTTPS with self-signed certificate..."
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ssl-cert
 
-# Testing Internet connectivity before attempting SSL
-echo "Testing Internet connectivity..."
-if ping -c 3 google.com &>/dev/null; then
-    echo "Internet connectivity confirmed, proceeding with SSL setup"
-    
-    # Create a proper domain name for the SSL certificate using nip.io
-    IP_DASH=$(echo $VM_IP | tr '.' '-')
-    HOST_NAME="${IP_DASH}.nip.io"
-    echo "Configuring SSL for hostname: $HOST_NAME"
+# Generate a self-signed certificate
+echo "Generating self-signed certificate..."
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/apache-selfsigned.key \
+  -out /etc/ssl/certs/apache-selfsigned.crt \
+  -subj "/CN=${VM_IP}"
 
-    # Update Apache configuration to recognize the hostname
-    echo "Updating Apache configuration..."
-    sudo bash -c "cat > /etc/apache2/sites-available/wordpress-ssl.conf << EOL
+# Create Apache SSL configuration
+echo "Configuring Apache for SSL..."
+sudo bash -c "cat > /etc/apache2/sites-available/wordpress-ssl.conf << EOL
 <VirtualHost *:80>
-    ServerName $HOST_NAME
-    ServerAlias www.$HOST_NAME
+    ServerName ${VM_IP}
     DocumentRoot /var/www/html
+    
+    <Directory /var/www/html>
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+    
+    ErrorLog \${APACHE_LOG_DIR}/error.log
+    CustomLog \${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName ${VM_IP}
+    DocumentRoot /var/www/html
+    
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/certs/apache-selfsigned.crt
+    SSLCertificateKeyFile /etc/ssl/private/apache-selfsigned.key
     
     <Directory /var/www/html>
         Options FollowSymLinks
@@ -206,23 +220,18 @@ if ping -c 3 google.com &>/dev/null; then
 </VirtualHost>
 EOL"
 
-    # Enable the site
-    sudo a2ensite wordpress-ssl.conf
-    sudo a2enmod rewrite
-    sudo systemctl reload apache2
+# Enable required modules and site
+echo "Enabling Apache SSL configuration..."
+sudo a2enmod ssl
+sudo a2ensite wordpress-ssl.conf
+sudo a2enmod rewrite
 
-    # Obtain SSL certificate with error handling - use register-unsafely option
-    echo "Obtaining SSL certificate..."
-    if sudo certbot --apache --non-interactive --agree-tos --register-unsafely-without-email --preferred-challenges http -d "$HOST_NAME"; then
-        echo "SSL certificate obtained successfully"
-    else
-        echo "SSL certificate generation failed, continuing without SSL"
-        echo "Your site will still be accessible via HTTP at http://$VM_IP"
-    fi
-else
-    echo "Internet connectivity issues detected, skipping SSL setup"
-    echo "Your site will be accessible via HTTP only at http://$VM_IP"
-fi
+# Restart Apache to apply changes
+sudo systemctl restart apache2
+
+echo "Self-signed SSL certificate installed successfully"
+echo "Note: Browsers will show a security warning for self-signed certificates"
+echo "Your site is accessible via HTTPS at https://${VM_IP}"
 
 # Cleanup temporary directory
 sudo rm -rf "$TEMP_DIR"
@@ -233,8 +242,6 @@ echo "Disk usage:"
 df -h
 echo "Apache status:"
 sudo systemctl status apache2 --no-pager
-echo "SSL configuration:"
-sudo ls -la /etc/letsencrypt/live/ || echo "No SSL certificates found"
 ENDSSH
 
 # Check for successful installation
@@ -256,9 +263,5 @@ for i in {1..10}; do
     sleep 10
 done
 
-# Get VM IP and format for nip.io domain
-IP_DASH=$(echo $VM_IP | tr '.' '-')
-DOMAIN="${IP_DASH}.nip.io"
-log "WordPress is also accessible via HTTPS at https://$DOMAIN"
-
+log "WordPress is also accessible via HTTPS at https://$VM_IP (with self-signed certificate warning)"
 log "WordPress installation completed"

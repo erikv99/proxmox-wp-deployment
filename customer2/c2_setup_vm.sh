@@ -60,3 +60,6 @@ qm set $VM_ID --cicustom "user=local:snippets/cloud-init-config.yml"
 # Start VM
 log "Starting VM $VM_ID..."
 qm start $VM_ID
+
+log "Adding VM to HA configuration..."
+ha-manager add vm:$VM_ID || echo "Warning: Could not add VM to HA configuration"
