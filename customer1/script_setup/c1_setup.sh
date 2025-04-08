@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CONTAINER_COUNT=2
+CONTAINER_COUNT=6
 
 apt install -y curl
 

@@ -1,8 +1,7 @@
 #!/bin/bash
 
-# Variables based on your original setup
 START_ID=100
-COUNT=2
+COUNT=6
 
 echo "Starting container removal process..."
 

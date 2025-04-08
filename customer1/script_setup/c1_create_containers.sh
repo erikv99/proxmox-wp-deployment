@@ -3,12 +3,12 @@
 # Variabelen voor container configuratie
 BASE_IP="10.24.30" 
 START_ID=100        
-COUNT=2             
+CONTAINER_COUNT=6             
 STORAGE="ceph-pool"
 TEMPLATE="local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
 
 # Loop om containers te maken
-for ((i=0; i<COUNT; i++)); do
+for ((i=0; i<CONTAINER_COUNT; i++)); do
   ID=$((START_ID + i))
   IP_ADDRESS="${BASE_IP}.$((60 + i))"
   HOSTNAME="wp-lxc-$((i+1))"
