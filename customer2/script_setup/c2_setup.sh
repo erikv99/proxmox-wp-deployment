@@ -27,8 +27,8 @@ log "Starting WordPress VM setup script"
 
 # Clean up any existing VM and storage before proceeding
 log "Cleaning up any existing VM with ID $VM_ID"
-if [ -f "./customer2/c2_remove_secure_vm.sh" ]; then
-    bash ./customer2/c2_remove_secure_vm.sh $VM_ID $VM_IP
+if [ -f "./customer2/script_setup/c2_remove_secure_vm.sh" ]; then
+    bash ./customer2/script_setup/c2_remove_secure_vm.sh $VM_ID $VM_IP
     log "Cleanup completed"
 else
     log "Warning: Cleanup script not found, may encounter issues if VM already exists"
@@ -48,16 +48,16 @@ fi
 SSH_PUBLIC_KEY=$(cat "$SSH_KEY_DIR/${SSH_USER}_key.pub")
 
 # Step 1: Create cloud-init configuration
-source ./customer2/c2_create_cloud_init.sh
+source ./customer2/script_setup/c2_create_cloud_init.sh
 
 # Step 2: VM setup and disk configuration
-source ./customer2/c2_setup_vm.sh
+source ./customer2/script_setup/c2_setup_vm.sh
 
 # Step 3: Wait for VM to be accessible
-source ./customer2/c2_wait_for_vm.sh
+source ./customer2/script_setup/c2_wait_for_vm.sh
 
 # Step 4: Install and configure WordPress
-source ./customer2/c2_install_wordpress.sh
+source ./customer2/script_setup/c2_install_wordpress.sh
 
 log "Setup complete for WordPress VM"
 log "SSH key saved to $SSH_KEY_DIR/${SSH_USER}_key"
