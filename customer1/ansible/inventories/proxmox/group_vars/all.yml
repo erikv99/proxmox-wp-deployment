@@ -5,7 +5,7 @@ proxmox_api_password: "password"
 
 # Container configuration
 base_ip: "10.24.30"
-start_id: 100
+start_id: 300
 container_count: 6
 storage: "ceph-pool"
 template: "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst"

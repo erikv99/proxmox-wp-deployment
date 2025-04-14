@@ -12,7 +12,7 @@ sleep 15
 
 # Installeer WordPress op elke container
 for ((i=0; i<CONTAINER_COUNT; i++)); do
-   ID=$((100 + i))
+   ID=$((300 + i))
    echo "Installing WordPress on container $ID"
    ./customer1/script_setup/c1_install_wordpress_container.sh $ID
    

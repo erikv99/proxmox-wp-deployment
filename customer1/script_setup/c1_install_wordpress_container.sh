@@ -7,7 +7,7 @@ if [ -z "$1" ]; then
 fi
 
 CONTAINER_ID=$1
-CONTAINER_NUM=$(($CONTAINER_ID - 100 + 1))  
+CONTAINER_NUM=$(($CONTAINER_ID - 300 + 1))  
 SSH_USER="wpuser_${CONTAINER_NUM}"
 SSH_PASS="securePass_${CONTAINER_NUM}"  # Niet safe ofc, maar prima voor deze oplevering.
 DB_USER="wpdbuser_${CONTAINER_NUM}"

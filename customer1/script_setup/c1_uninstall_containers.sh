@@ -1,6 +1,6 @@
 #!/bin/bash
 
-START_ID=100
+START_ID=300
 COUNT=6
 
 echo "Starting container removal process..."
