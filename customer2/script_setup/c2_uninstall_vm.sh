@@ -13,7 +13,7 @@ fi
 
 VM_ID=$1
 VM_IP=$2
-STORAGE="ceph-pool"  # Default storage pool for RBD volumes
+STORAGE="ceph-pool" 
 
 echo "Starting cleanup for VM $VM_ID..."
 
@@ -28,7 +28,7 @@ if qm status $VM_ID &>/dev/null; then
         until ! qm status $VM_ID | grep -q running || [ $counter -ge 30 ]; do
             echo "Waiting for VM to stop... ($counter/30)"
             sleep 2
-            ((counter++))
+            counter=$((counter + 1))
         done
         
         # If VM is still running after timeout, proceed anyway
